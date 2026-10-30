@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#2563eb"><title>تحديث أجور</title><style>body{margin:0;background:#0c1220;color:#edf3ff;font:16px Tahoma,Arial,sans-serif;display:grid;place-items:center;min-height:100dvh}main{max-width:430px;margin:24px;padding:26px;border:1px solid #283852;border-radius:20px;background:#141f32}h1{font-size:23px}p{line-height:1.9;color:#b5c3da}button{background:#75a7ff;color:#0c1220;border:0;border-radius:10px;padding:12px 20px;font:inherit;cursor:pointer;min-height:44px}small{color:#9cacc7}</style></head><body><main><h1>تحديث تطبيق أجور</h1><p id="status" role="status">جارٍ تنزيل النسخة الجديدة…</p><p>يُحدّث هذا الرابط ملفات التطبيق فقط. بيانات العمال والحسابات والأرشيف تبقى محفوظة على جهازك.</p><small>Updating application files. Your locally saved payroll data stays on this device.</small><p><button id="retry" hidden>إعادة المحاولة / Retry</button></p></main><script>
+(async()=>{
+ const status=document.querySelector('#status'),retry=document.querySelector('#retry');
+ async function update(){
+  retry.hidden=true;
+  try{
+   const base=new URL('./',location.href);
+   // Confirm connectivity and warm the new entry point before touching offline files.
+   const response=await fetch(new URL('index.html?refresh='+Date.now(),base),{cache:'no-store'});
+   if(!response.ok)throw Error('network');
+   if('serviceWorker'in navigator){
+    const registrations=await navigator.serviceWorker.getRegistrations();
+    for(const registration of registrations)if(registration.scope===base.href)await registration.unregister();
+   }
+   if('caches'in window){for(const key of await caches.keys())if(key.startsWith('workers-ledger-'))await caches.delete(key);}
+   // IndexedDB is intentionally never opened or deleted by this updater.
+   status.textContent='تم التحديث. جارٍ فتح التطبيق…';
+   location.replace(new URL('./?updated='+Date.now(),base).href);
+  }catch{
+   status.textContent='تعذر تنزيل التحديث. تحقق من الإنترنت ثم أعد المحاولة. لم تُمسح بياناتك.';
+   retry.hidden=false;
+  }
+ }
+ retry.onclick=update;await update();
+})();
+</script></body></html>
