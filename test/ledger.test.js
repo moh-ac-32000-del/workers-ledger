@@ -40,3 +40,25 @@ test('report renders grouped day/hour records and escapes names and notes',async
     assert.match(html,/&lt;script&gt;/);assert.match(html,/&lt;img&gt;/);assert.ok(html.includes(translate('dayCount',lang)));assert.ok(html.includes('30'));
   }
 });
+test('duration input interprets H.MM as minutes, with strict two-digit minute parts',async()=>{
+  const {parseWorkDuration}=await import('../ledger.js');
+  for(const [text,hours] of [['0.30',0.5],['1.30',1.5],['1.05',1+5/60],['0.01',1/60],['0.59',59/60],['2',2],['2.00',2],['1:45',1.75],['0,30',0.5],['.30',0.5],['٠٫٣٠',0.5],['۱.۰۵',1+5/60]])assert.equal(parseWorkDuration(text),hours,text);
+  for(const text of ['0.60','1.99','0','0.00','-1.30','0.3','1.5','0.300','1e2','','text','1.30.20','9007199254740992'])assert.throws(()=>parseWorkDuration(text),/duration/,text);
+});
+test('minute input calculates overtime and lateness at the correct rates',async()=>{
+  const {parseWorkDuration}=await import('../ledger.js');const s=fixture();tx(s,'overtime',parseWorkDuration('0.30'));tx(s,'late',parseWorkDuration('0.30'));
+  const result=totals(s.workers[0],s.month);assert.equal(result.overtime,2.25);assert.equal(result.late,1.5);assert.equal(result.net,900.75);
+});
+test('attendance totals keep minute precision before calculating money',async()=>{
+  const {parseWorkDuration}=await import('../ledger.js');const {attendance,entryAmount}=await import('../report.js');const s=fixture();tx(s,'late',parseWorkDuration('0.20'));
+  const counts=attendance(s.month.entries,'w');assert.equal(entryAmount({type:'late',value:counts.late},900),1);assert.equal(totals(s.workers[0],s.month).late,1);
+});
+test('duration display carries minutes into hours without changing old saved hours',async()=>{
+  const {workDurationParts,parseWorkDuration}=await import('../ledger.js');assert.deepEqual(workDurationParts(parseWorkDuration('0.45')+parseWorkDuration('0.30')),{hours:1,minutes:15});assert.deepEqual(workDurationParts(1.5),{hours:1,minutes:30});assert.deepEqual(workDurationParts(0.3),{hours:0,minutes:18});
+  const s=fixture();tx(s,'overtime',1.5);closeMonth(s);assert.equal(s.archives[0].entries[0].value,1.5);assert.equal(s.archives[0].workers[0].overtime,6.75);
+});
+test('reports show minute quantities for each entry and hour/minute group totals',async()=>{
+  const {parseWorkDuration}=await import('../ledger.js');const {createReports}=await import('../report.js');const {translate}=await import('../i18n.js');
+  const reports=createReports({t:k=>translate(k,'en'),num:String,esc:String,amount:String,btn:()=>''});const s=fixture();tx(s,'overtime',parseWorkDuration('0.45'));tx(s,'overtime',parseWorkDuration('0.30'));
+  const html=reports.activityGroups(s.month.entries,900);assert.match(html,/1 hours 15 minutes/);assert.match(html,/45 minutes/);assert.match(html,/30 minutes/);assert.doesNotMatch(html,/0\.75 hours/);
+});

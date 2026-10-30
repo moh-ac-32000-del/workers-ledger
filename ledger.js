@@ -6,3 +6,22 @@ export function closeMonth(state,now=new Date().toISOString()){const snapshot=st
 export function cleanup(state,now=Date.now()){if(state.settings.autoDelete&&state.settings.retention>0)state.archives=state.archives.filter(x=>now-Date.parse(x.closedAt)<state.settings.retention*86400000);return state;}
 
 export function removeEntry(state,id){const entry=state.month.entries.find(x=>x.id===id)??state.debts.find(x=>x.id===id&&x.type==='cash'&&x.month===state.month.key);if(!entry)throw Error('entry');if(state.month.entries.some(x=>x.sourceId===id))throw Error('linked');const next=structuredClone(state);next.month.entries=next.month.entries.filter(x=>x.id!==id);next.debts=next.debts.filter(x=>x.id!==id);if(debt(next,entry.workerId)<0)throw Error('linked');const w=next.workers.find(x=>x.id===entry.workerId),s=totals(w,next.month);if(s.deduction>Math.max(0,round(s.net+s.deduction)))throw Error('funds');return next;}
+
+// UI durations use H.MM (minutes), while saved values remain hours for compatibility.
+export function parseWorkDuration(input) {
+  let text=String(input).trim()
+    .replace(/[٠-٩]/g,c=>String(c.charCodeAt(0)-0x660))
+    .replace(/[۰-۹]/g,c=>String(c.charCodeAt(0)-0x6f0))
+    .replace(/[٫،,]/g,'.');
+  if (/^[.:]/.test(text)) text='0'+text;
+  const match=/^(\d+)(?:[.:](\d{2}))?$/.exec(text);
+  if (!match) throw Error('duration');
+  const hours=Number(match[1]),minutes=Number(match[2]??0);
+  const total=hours*60+minutes;
+  if (minutes>=60||!Number.isSafeInteger(total)||total<=0) throw Error('duration');
+  return total/60;
+}
+export function workDurationParts(hours) {
+  const minutes=Math.round(hours*60);
+  return {hours:Math.floor(minutes/60),minutes:minutes%60};
+}
