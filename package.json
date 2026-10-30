@@ -1,0 +1,1 @@
+{"name":"workers-ledger","version":"0.1.0","private":true,"type":"module","scripts":{"dev":"node server.js","test":"node test/ledger.test.js","start":"node server.js"}}
