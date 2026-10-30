@@ -78,3 +78,68 @@ test('deleting an unknown worker leaves the ledger intact',async()=>{
   const {removeWorker}=await import('../ledger.js');const s=fixture(),before=structuredClone(s);
   assert.throws(()=>removeWorker(s,'missing'),/worker/);assert.deepEqual(s,before);
 });
+test('custom rules drive payroll and statement entries through the same rates',async()=>{
+  const {payRates,setMonthlyRules}=await import('../ledger.js');const {entryAmount}=await import('../report.js');
+  let s=fixture();s.workers[0].salary=1040;s.month.salaries.w=1040;
+  s=setMonthlyRules(s,{days:26,hoursPerDay:8,overtimeMultiplier:2},true);
+  tx(s,'absence',2);tx(s,'late',.5);tx(s,'overtime',1.5);
+  assert.deepEqual(payRates(1040,s.month.rules),{daily:40,hourly:5,overtime:10});
+  const result=totals(s.workers[0],s.month);assert.equal(result.absence,80);assert.equal(result.late,2.5);assert.equal(result.overtime,15);assert.equal(result.net,972.5);
+  assert.equal(entryAmount(s.month.entries[2],1040,s.month.rules),15);
+});
+test('rules scheduled for the next month do not reprice current or archived entries',async()=>{
+  const {DEFAULT_MONTHLY_RULES,setMonthlyRules,periodRules}=await import('../ledger.js');let s=fixture();tx(s,'overtime',1);
+  const rules={days:25,hoursPerDay:8,overtimeMultiplier:2};s=setMonthlyRules(s,rules);
+  assert.equal(totals(s.workers[0],s.month).overtime,4.5);closeMonth(s);
+  assert.deepEqual(s.archives[0].rules,DEFAULT_MONTHLY_RULES);assert.deepEqual(s.month.rules,rules);
+  const archive=structuredClone(s.archives[0]);s=setMonthlyRules(s,{days:20,hoursPerDay:6,overtimeMultiplier:3},true);
+  assert.deepEqual(s.archives[0],archive);assert.deepEqual(periodRules({entries:[]}),DEFAULT_MONTHLY_RULES);
+});
+test('rules validation accepts old backups and rejects invalid optional rules',async()=>{
+  const {setMonthlyRules,validRules}=await import('../ledger.js');const s=fixture();assert.equal(valid(s),true);
+  for(const rules of [{days:0,hoursPerDay:10,overtimeMultiplier:1.5},{days:30,hoursPerDay:0,overtimeMultiplier:1.5},{days:30,hoursPerDay:25,overtimeMultiplier:1.5},{days:30,hoursPerDay:10,overtimeMultiplier:-1}]){assert.equal(validRules(rules),false);assert.throws(()=>setMonthlyRules(s,rules));s.settings.monthlyRules=rules;assert.equal(valid(s),false);}
+});
+test('shared rule engine supports shorter periods without altering monthly defaults',async()=>{
+  const {payRates,DEFAULT_MONTHLY_RULES}=await import('../ledger.js');
+  assert.deepEqual(payRates(600,{days:6,hoursPerDay:10,overtimeMultiplier:1.5}),{daily:100,hourly:10,overtime:15});
+  assert.deepEqual(DEFAULT_MONTHLY_RULES,{days:30,hoursPerDay:10,overtimeMultiplier:1.5});
+});
+test('weekly fractional days calculate rates and permit fractional absence independently',async()=>{
+  const {createWeeklyLedger,setWeeklyRules}=await import('../ledger.js');let root=fixture();root.weekly=createWeeklyLedger('2026-10-30');
+  root=setWeeklyRules(root,{days:5.5,hoursPerDay:10,overtimeMultiplier:1.5},true);
+  const week={...root.weekly,settings:root.settings};week.workers.push({id:'weekly',name:'Weekly',salary:550});week.month.salaries.weekly=550;
+  addEntry(week,{id:'absence',workerId:'weekly',type:'absence',value:.5,date:'2026-10-30'});addEntry(week,{id:'late',workerId:'weekly',type:'late',value:.5,date:'2026-10-30'});addEntry(week,{id:'overtime',workerId:'weekly',type:'overtime',value:1.5,date:'2026-10-30'});
+  const result=totals(week.workers[0],week.month);assert.equal(result.absence,50);assert.equal(result.late,5);assert.equal(result.overtime,22.5);assert.equal(result.net,517.5);
+  assert.equal(root.month.entries.length,0);assert.equal(valid(root),true);assert.throws(()=>setWeeklyRules(root,{days:7.5,hoursPerDay:10,overtimeMultiplier:1.5}));
+});
+test('closing weekly carries debt and freezes rules while advancing seven calendar days',async()=>{
+  const {createWeeklyLedger,closeWeek}=await import('../ledger.js');const root=fixture();const monthly=structuredClone(root);
+  const week={...createWeeklyLedger('2026-12-31'),settings:{weeklyRules:{days:5.5,hoursPerDay:8,overtimeMultiplier:2}}};week.workers=[{id:'w',name:'Week',salary:600}];week.month.salaries.w=600;
+  addEntry(week,{id:'advance',workerId:'w',type:'advance',value:700,date:'2026-12-31'});closeWeek(week);
+  assert.equal(week.archives[0].workers[0].deficit,100);assert.equal(debt(week,'w'),100);assert.equal(week.month.key,'2027-01-04');assert.equal(week.month.rules.days,5.5);assert.equal(week.archives[0].rules.days,6);assert.deepEqual(root,monthly);
+});
+test('weekly dates use a calendar week independently of fractional workday divisor',async()=>{
+  const {createWeeklyLedger,dateInPeriod,weekStart}=await import('../ledger.js');const week=createWeeklyLedger('2026-10-30',{days:5.5,hoursPerDay:10,overtimeMultiplier:1.5});
+  assert.equal(weekStart('2026-10-30'),'2026-10-26');assert.equal(dateInPeriod(week.month,'2026-11-01'),true);assert.equal(dateInPeriod(week.month,'2026-11-02'),false);assert.equal(dateInPeriod(week.month,'2026-10-25'),false);
+});
+test('weekly backup data and retention remain separate from monthly records and debts',async()=>{
+  const {createWeeklyLedger,closeWeek}=await import('../ledger.js');const root=fixture();root.weekly=createWeeklyLedger('2026-10-30');root.weekly.workers=[{id:'weekly',name:'Week',salary:600}];root.weekly.month.salaries.weekly=600;
+  const week={...root.weekly,settings:root.settings};closeWeek(week,'2026-11-01T00:00:00Z');root.weekly={workers:week.workers,month:week.month,debts:week.debts,archives:week.archives};assert.equal(valid(root),true);root.settings.retention=1;root.settings.autoDelete=true;cleanup(root,Date.parse('2027-01-01'));assert.equal(root.weekly.archives.length,0);assert.equal(debt(root,'w'),500);
+  root.weekly.month.rules.days=0;assert.equal(valid(root),false);
+});
+test('calendar months have their real lengths independently of the 30-day payroll divisor',async()=>{
+  const {calendarMonthBounds,dateInPeriod}=await import('../ledger.js');
+  for(const [key,days] of [['2026-02',28],['2024-02',29],['2026-04',30],['2026-01',31]]){
+    const bounds=calendarMonthBounds(key);assert.equal(bounds.days,days);assert.equal(bounds.end,key+'-'+days);
+    const s=fixture();s.month.key=key;tx(s,'absence',1);assert.equal(totals(s.workers[0],s.month).absence,30);
+  }
+  assert.equal(dateInPeriod({key:'2026-02'},'2026-02-29'),false);
+  assert.equal(dateInPeriod({key:'2024-02'},'2024-02-29'),true);
+  assert.equal(dateInPeriod({key:'2026-04'},'2026-04-31'),false);
+  assert.equal(dateInPeriod({key:'2026-01'},'2026-01-31'),true);
+});
+test('manual month closure advances the calendar month rather than a thirty-day timer',()=>{
+  for(const [key,next] of [['2026-01','2026-02'],['2026-02','2026-03'],['2024-02','2024-03'],['2026-12','2027-01']]){
+    const s=fixture();s.month.key=key;closeMonth(s);assert.equal(s.month.key,next);
+  }
+});
