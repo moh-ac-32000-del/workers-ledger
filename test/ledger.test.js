@@ -15,3 +15,28 @@ test('backup validates numeric values and schema',()=>{const s=fixture();assert.
 test('removing current entries corrects debt and rejects linked conversion',async()=>{const {removeEntry}=await import('../ledger.js');const s=fixture();tx(s,'advance',200);const id=s.month.entries[0].id;tx(s,'convert',100,{sourceId:id});assert.throws(()=>removeEntry(s,id));const convertedId=s.month.entries[1].id;const next=removeEntry(s,convertedId);assert.equal(debt(next,'w'),500);assert.equal(totals(next.workers[0],next.month).payable,700);assert.equal(s.month.entries.length,2);});
 test('archived debt contains cash repayments and final debt snapshot',()=>{const s=fixture();tx(s,'cash',50);closeMonth(s);assert.equal(s.archives[0].debtEntries[0].type,'cash');assert.equal(s.archives[0].workers[0].debtAfter,450);});
 test('current cash repayment can be corrected before month closing',async()=>{const {removeEntry}=await import('../ledger.js');const s=fixture();tx(s,'cash',50);const next=removeEntry(s,s.debts[1].id);assert.equal(debt(next,'w'),500);});
+test('attendance quantities stay separate from their financial values',async()=>{
+  const {attendance,entryAmount}=await import('../report.js');const s=fixture();
+  tx(s,'absence',2);tx(s,'overtime',1.5);tx(s,'overtime',0.5);tx(s,'late',2.5);
+  assert.deepEqual(attendance(s.month.entries,'w'),{absence:2,overtime:2,late:2.5});
+  assert.equal(entryAmount({type:'absence',value:2},900),60);
+  assert.equal(entryAmount({type:'overtime',value:1.5},900),6.75);
+  assert.equal(entryAmount({type:'late',value:2.5},900),7.5);
+});
+test('old archive entries recover quantities using frozen salary after salary change',async()=>{
+  const {attendance,entryAmount}=await import('../report.js');const s=fixture();tx(s,'overtime',1.5);closeMonth(s);
+  s.workers[0].salary=1200;const old=s.archives[0];
+  assert.equal(attendance(old.entries,'w').overtime,1.5);
+  assert.equal(entryAmount(old.entries[0],old.workers[0].salary),6.75);
+});
+test('report renders grouped day/hour records and escapes names and notes',async()=>{
+  const {createReports}=await import('../report.js');const {translate}=await import('../i18n.js');
+  const esc=s=>String(s??'').replaceAll('<','&lt;').replaceAll('>','&gt;');
+  for(const lang of ['ar','tr','en']){
+    const r=createReports({t:k=>translate(k,lang),num:String,esc,amount:String,btn:()=>''});
+    const s=fixture();tx(s,'absence',1);s.month.entries[0].note='<script>';s.workers[0].name='<img>';
+    const html=r.workerReport({worker:s.workers[0],summary:totals(s.workers[0],s.month),entries:s.month.entries,month:s.month.key,balance:500});
+    assert.match(html,/data-group="absence"/);assert.match(html,/data-group="overtime"/);assert.match(html,/data-group="late"/);
+    assert.match(html,/&lt;script&gt;/);assert.match(html,/&lt;img&gt;/);assert.ok(html.includes(translate('dayCount',lang)));assert.ok(html.includes('30'));
+  }
+});

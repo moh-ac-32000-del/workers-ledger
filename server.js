@@ -2,7 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 const root=import.meta.dirname;
-const publicFiles=new Set(['index.html','style.css','app.js','ledger.js','storage.js','i18n.js','manifest.webmanifest','sw.js','icon.svg','icon-192.png','icon-512.png']);
+const publicFiles=new Set(['index.html','style.css','app.js','ledger.js','storage.js','i18n.js','report.js','manifest.webmanifest','sw.js','icon.svg','icon-192.png','icon-512.png']);
 http.createServer((req,res)=>{
   let pathname;
   try { pathname=decodeURIComponent(req.url.split('?')[0]); }
