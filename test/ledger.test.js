@@ -62,3 +62,19 @@ test('reports show minute quantities for each entry and hour/minute group totals
   const reports=createReports({t:k=>translate(k,'en'),num:String,esc:String,amount:String,btn:()=>''});const s=fixture();tx(s,'overtime',parseWorkDuration('0.45'));tx(s,'overtime',parseWorkDuration('0.30'));
   const html=reports.activityGroups(s.month.entries,900);assert.match(html,/1 hours 15 minutes/);assert.match(html,/45 minutes/);assert.match(html,/30 minutes/);assert.doesNotMatch(html,/0\.75 hours/);
 });
+test('deleting a worker removes current entries and debt but preserves archived statements',async()=>{
+  const {removeWorker}=await import('../ledger.js');const s=fixture();
+  s.workers.push({id:'other',name:'Other',salary:1200});s.month.salaries.other=1200;
+  tx(s,'advance',100);closeMonth(s);tx(s,'advance',50);
+  const archive=structuredClone(s.archives),next=removeWorker(s,'w');
+  assert.equal(next.workers.length,1);assert.equal(next.workers[0].id,'other');
+  assert.equal(next.month.entries.filter(e=>e.workerId==='w').length,0);
+  assert.equal(next.debts.filter(e=>e.workerId==='w').length,0);
+  assert.equal('w' in next.month.salaries,false);assert.equal(next.month.salaries.other,1200);
+  assert.deepEqual(next.archives,archive);assert.equal(valid(next),true);
+  assert.equal(s.workers.length,2);assert.equal(debt(s,'w'),500);
+});
+test('deleting an unknown worker leaves the ledger intact',async()=>{
+  const {removeWorker}=await import('../ledger.js');const s=fixture(),before=structuredClone(s);
+  assert.throws(()=>removeWorker(s,'missing'),/worker/);assert.deepEqual(s,before);
+});

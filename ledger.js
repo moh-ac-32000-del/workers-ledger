@@ -25,3 +25,14 @@ export function workDurationParts(hours) {
   const minutes=Math.round(hours*60);
   return {hours:Math.floor(minutes/60),minutes:minutes%60};
 }
+
+export function removeWorker(state,id){
+  if(!state.workers.some(w=>w.id===id))throw Error('worker');
+  const next=structuredClone(state);
+  next.workers=next.workers.filter(w=>w.id!==id);
+  next.month.entries=next.month.entries.filter(e=>e.workerId!==id);
+  delete next.month.salaries[id];
+  next.debts=next.debts.filter(e=>e.workerId!==id);
+  // Closed months are independent snapshots and must remain unchanged.
+  return next;
+}
