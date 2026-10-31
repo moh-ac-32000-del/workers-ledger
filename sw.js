@@ -1,4 +1,4 @@
-const VERSION='13';
+const VERSION='14';
 const CACHE='workers-ledger-v'+VERSION;
 const FILES=['./','./index.html','./style.css','./app.js','./ledger.js','./storage.js','./i18n.js','./report.js','./transfer.js','./lock.js','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',event=>event.waitUntil(

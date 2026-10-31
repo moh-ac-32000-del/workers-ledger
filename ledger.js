@@ -132,3 +132,21 @@ export function selectPeriod(state,key,{reopen=false,undoPaid=false}={}){
   next.openPeriods[next.month.key]=next.month;
   next.month=target;delete next.openPeriods[key];return next;
 }
+
+export function updateEntry(state,id,changes){
+ const original=state.month.entries.find(e=>e.id===id)??state.debts.find(e=>e.id===id&&e.type==='cash'&&e.month===state.month.key);
+ if(!original)throw Error('entry');
+ const entry={...original,value:changes.value,date:changes.date,note:String(changes.note??'')};
+ if(!validIsoDate(entry.date)||!dateInPeriod(state.month,entry.date))throw Error('date-period');
+ const next=structuredClone(state),index=next.month.entries.findIndex(e=>e.id===id),debtIndex=next.debts.findIndex(e=>e.id===id);
+ next.month.entries=next.month.entries.filter(e=>e.id!==id);next.debts=next.debts.filter(e=>e.id!==id);
+ const converted=next.month.entries.filter(e=>e.type==='convert'&&e.sourceId===id).reduce((sum,e)=>sum+e.value,0);
+ if(entry.type==='advance'&&entry.value<round(converted))throw Error('linked');
+ addEntry(next,entry);
+ if(debt(next,entry.workerId)<0)throw Error('linked');
+ const summary=totals(next.workers.find(w=>w.id===entry.workerId),next.month);
+ if(summary.deduction>Math.max(0,round(summary.net+summary.deduction)))throw Error('funds');
+ if(index>=0){const saved=next.month.entries.pop();next.month.entries.splice(index,0,saved);}
+ if(debtIndex>=0){const saved=next.debts.pop();next.debts.splice(debtIndex,0,saved);}
+ return next;
+}
