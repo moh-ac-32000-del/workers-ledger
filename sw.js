@@ -1,6 +1,6 @@
-const VERSION='8';
+const VERSION='9';
 const CACHE='workers-ledger-v'+VERSION;
-const FILES=['./','./index.html','./style.css','./app.js','./ledger.js','./storage.js','./i18n.js','./report.js','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png'];
+const FILES=['./','./index.html','./style.css','./app.js','./ledger.js','./storage.js','./i18n.js','./report.js','./transfer.js','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',event=>event.waitUntil(
  caches.open(CACHE).then(cache=>cache.addAll(FILES.map(file=>new Request(new URL(file,self.registration.scope),{cache:'reload'})))).then(()=>self.skipWaiting())
 ));

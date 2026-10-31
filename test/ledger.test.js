@@ -143,3 +143,18 @@ test('manual month closure advances the calendar month rather than a thirty-day 
     const s=fixture();s.month.key=key;closeMonth(s);assert.equal(s.month.key,next);
   }
 });
+test('full clipboard code round-trips both ledgers, all entries, debts, archives, rules and Arabic text',async()=>{
+  const {createTransferCode,parseTransferCode,transferSummary}=await import('../transfer.js');const {createWeeklyLedger,closeWeek}=await import('../ledger.js');
+  const s=fixture();s.revision=42;s.workers[0].name='محمد — العامل';tx(s,'absence',1);tx(s,'late',.5);tx(s,'overtime',1.75);tx(s,'advance',100);tx(s,'deduct',50);tx(s,'cash',20);closeMonth(s);tx(s,'late',.5);
+  s.settings.monthlyRules={days:26,hoursPerDay:8,overtimeMultiplier:2};s.settings.weeklyRules={days:5.5,hoursPerDay:10,overtimeMultiplier:1.5};s.weekly=createWeeklyLedger('2026-10-30',s.settings.weeklyRules);s.weekly.workers=[{id:'weekly',name:'عامل أسبوعي',salary:550}];s.weekly.month.salaries.weekly=550;s.weekly.debts=[{id:'weekly-opening',workerId:'weekly',type:'opening',value:200,date:'2026-10-30'}];
+  const week={...s.weekly,settings:s.settings};addEntry(week,{id:'week-late',workerId:'weekly',type:'late',value:.5,date:'2026-10-30',note:'تأخير بالدقائق'});closeWeek(week);s.weekly={workers:week.workers,month:week.month,debts:week.debts,archives:week.archives};
+  const original=structuredClone(s),code=createTransferCode(s),restored=parseTransferCode(code);delete original.revision;
+  assert.deepEqual(restored,original);assert.equal(s.revision,42);assert.deepEqual(transferSummary(restored),{monthlyWorkers:1,weeklyWorkers:1,openEntries:1,debtRecords:4,archivedPeriods:2});
+});
+test('transfer codes tolerate wrapped lines and preserve long multi-byte notes',async()=>{
+  const {createTransferCode,parseTransferCode,TRANSFER_PREFIX}=await import('../transfer.js');const s=fixture();tx(s,'late',.5);s.month.entries[0].note='تأخير — مسائي — ديون 🌙 '.repeat(3000);const code=createTransferCode(s);const wrapped=TRANSFER_PREFIX+code.slice(TRANSFER_PREFIX.length).match(/.{1,80}/g).join('\n');assert.deepEqual(parseTransferCode(wrapped),s);
+});
+test('paste accepts existing JSON backups and rejects malformed or other-app codes',async()=>{
+  const {parseTransferCode,TRANSFER_PREFIX}=await import('../transfer.js');const s=fixture();assert.deepEqual(parseTransferCode(JSON.stringify(s)),s);
+  for(const code of ['',TRANSFER_PREFIX+'???',TRANSFER_PREFIX+btoa(JSON.stringify({format:'other-app',version:1,data:s})),TRANSFER_PREFIX+btoa(JSON.stringify({format:'workers-ledger',version:2,data:s})),JSON.stringify({...s,workers:[{id:'w',name:'bad',salary:-1}]})])assert.throws(()=>parseTransferCode(code));
+});

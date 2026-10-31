@@ -1,8 +1,9 @@
+import {createTransferCode,parseTransferCode,transferSummary} from './transfer.js';
 import {createReports} from './report.js';
 import {totals,debt,addEntry,closeMonth,cleanup,round,removeEntry,parseWorkDuration,removeWorker,periodRules,DEFAULT_MONTHLY_RULES,setMonthlyRules,workDurationParts,DEFAULT_WEEKLY_RULES,setWeeklyRules,createWeeklyLedger,closeWeek,dateInPeriod,addCalendarDays,calendarMonthBounds} from './ledger.js';
 import {openStore,read,write,valid} from './storage.js';
 import {translate} from './i18n.js';
-const APP_VERSION='8';
+const APP_VERSION='9';
 const app=document.querySelector('#app'),dialog=document.querySelector('#dialog');
 let newerVersionAvailable=false;
 let payrollKind='monthly';
@@ -71,7 +72,7 @@ function settings(){
   const group=(id,title,icon,content,badge='')=>`<details class="settings-group" data-section="${id}" ${openSettingsGroups.has(id)?'open':''}><summary><span class="settings-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${icons[icon]}</svg></span><span class="settings-group-label">${t(title)}</span>${badge?`<span class="settings-count">${badge}</span>`:''}<span class="settings-chevron" aria-hidden="true"></span></summary><div class="settings-group-body">${content}</div></details>`;
   const workers=`${scopeTabs()}<div class="settings-tools">${btn('+ '+t('add'),'add','primary compact-button')}</div>${activeLedger().workers.length?`<ul class="worker-list settings-worker-list">${activeLedger().workers.map(w=>`<li><div class="worker-row settings-worker-row"><span class="worker-avatar" aria-hidden="true">${esc(w.name[0])}</span><span class="worker-info"><strong class="worker-name">${esc(w.name)}</strong><span class="worker-finances"><span>${t('salary')}: <strong>${amount(w.salary)}</strong></span><span>${t('debts')}: <strong>${amount(debt(activeLedger(),w.id))}</strong></span></span></span>${btn(t('edit'),`edit:${w.id}`,'compact-button')}</div></li>`).join('')}</ul>`:`<p class="muted">${t('none')}</p>`}<p class="settings-help">${t('nextSalary')}</p>${reports.ruleSummary(periodRules(activeLedger().month))}`;
   const preferences=`<form id="preferences"><label for="lang">${t('language')}</label><select id="lang" name="lang">${[['ar','العربية'],['tr','Türkçe'],['en','English']].map(([k,v])=>`<option value="${k}" ${state.settings.lang===k?'selected':''}>${v}</option>`).join('')}</select><label for="theme">${t('theme')}</label><select id="theme" name="theme">${['system','light','dark'].map(k=>`<option value="${k}" ${state.settings.theme===k?'selected':''}>${t(k)}</option>`).join('')}</select><p class="theme-hint">${t('themeInstant')}</p>${field('retention','number',state.settings.retention,'min="0" step="1" required')}<label class="row"><span>${t('auto')}</span><input type="checkbox" name="auto" ${state.settings.autoDelete?'checked':''}></label><div class="actions"><button class="primary" type="submit">${t('save')}</button></div></form>${monthlyRulesForm()}${weeklyRulesForm()}`;
-  const backup=`<p class="settings-help">${t('local')}</p><div class="backup-actions">${btn(t('backup'),'backup')}${btn(t('restore'),'restore')}</div><input type="file" id="restore-file" accept="application/json" hidden>`;
+  const backup=`<p class="settings-help">${t('copyAllDescription')}</p><div class="backup-actions">${btn(t('copyAllData'),'copy-all','primary')}${btn(t('pasteAllData'),'import-code')}</div><p class="settings-help">${t('local')}</p><div class="backup-actions">${btn(t('backup'),'backup')}${btn(t('restore'),'restore')}</div><input type="file" id="restore-file" accept="application/json" hidden>`;
   return `<h2>${t('settings')}</h2><div class="settings-groups">${group('workers','workers','workers',workers,num(state.workers.length+state.weekly.workers.length))}${group('preferences','preferences','preferences',preferences)}${group('backup','backupRestore','backup',backup)}</div><div class="app-update-row"><small>${t('version')} ${APP_VERSION}</small>${btn(t('updateApp'),'update-app','compact-button')}</div>`;
 }
 function table(entries,editable=false){return entries.length?`<div class="table"><table><thead><tr><th>${t('date')}</th><th>${t('activity')}</th><th>${t('value')}</th><th>${t('note')}</th></tr></thead><tbody>${entries.map(x=>`<tr><td>${esc(x.date)}</td><td>${t(x.type)}</td><td>${amount(x.value)}</td><td>${esc(x.note)}</td>${(editable===true||editable==='debt'&&x.type==='cash'&&x.month===activeLedger().month.key)?`<td>${btn(t('delete'),`remove:${x.id}`,'danger')}</td>`:''}</tr>`).join('')}</tbody></table></div>`:`<p>${t('none')}</p>`;}
@@ -133,8 +134,48 @@ function buildPrintReport(){
 window.addEventListener('beforeprint',()=>{buildPrintReport();restoreDialogAfterPrint=dialog.open;if(dialog.open)dialog.close();});
 window.addEventListener('afterprint',()=>{if(restoreDialogAfterPrint){dialog.showModal();restoreDialogAfterPrint=false;}});
 function review(){if(!activeLedger().workers.length)return;modal(t('review'),`<p class="notice">${t('closeNote')}</p><div class="table"><table><thead><tr><th>${t('name')}</th><th>${t('payable')}</th><th>${t('deficit')}</th></tr></thead><tbody>${activeLedger().workers.map(w=>{const s=totals(w,activeLedger().month);return `<tr><td>${esc(w.name)}</td><td>${amount(s.payable)}</td><td>${amount(s.deficit)}</td></tr>`}).join('')}</tbody></table></div><div class="actions">${btn(t('cancel'),'dismiss')}<button class="primary" type="submit">${t('confirm')}</button></div>`,async()=>{const ledger=structuredClone(activeLedger());(payrollKind==='weekly'?closeWeek:closeMonth)(ledger);await persist(replaceLedger(state,ledger));dialog.close();toast(t('saved'));});}
+async function copyAllData(){
+  // Read the latest stored snapshot so another window's saved records are included.
+  const latest=await read();
+  const code=createTransferCode(latest??state);
+  try{
+    if(!navigator.clipboard?.writeText)throw Error('clipboard');
+    await navigator.clipboard.writeText(code);toast(t('allDataCopied'));
+  }catch{
+    modal(t('copyAllData'),`<p class="settings-help">${t('manualCopyHelp')}</p><label for="manual-copy-text">${t('fullDataCode')}</label><textarea id="manual-copy-text" readonly dir="ltr" spellcheck="false">${esc(code)}</textarea><div class="actions"><button type="button" id="manual-copy-button" class="primary">${t('copyAllData')}</button>${btn(t('cancel'),'dismiss')}</div>`);
+    const input=dialog.querySelector('#manual-copy-text');input.focus();input.select();
+    dialog.querySelector('#manual-copy-button').onclick=()=>{
+      input.focus();input.select();input.setSelectionRange(0,input.value.length);
+      try{if(document.execCommand('copy'))toast(t('allDataCopied'));}catch{/* Native selection remains available. */}
+    };
+  }
+}
+function importCodeDialog(){
+  modal(t('pasteAllData'),`<p class="settings-help">${t('pasteAllDescription')}</p><label for="transfer-input">${t('fullDataCode')}</label><textarea id="transfer-input" name="code" required dir="ltr" spellcheck="false" autocomplete="off" placeholder="WORKERS-LEDGER-1:…"></textarea><p id="paste-help" class="settings-help" role="status"></p><div class="actions">${btn(t('pasteClipboard'),'paste-code')}<button class="primary" type="submit">${t('previewRestore')}</button>${btn(t('cancel'),'dismiss')}</div>`,f=>{
+    let candidate;
+    try{candidate=parseTransferCode(f.get('code'));}catch{dialog.querySelector('#form-error').textContent=t('restoreError');return;}
+    dialog.close();confirmCodeRestore(candidate);
+  });
+  dialog.querySelector('#transfer-input').focus();
+}
+async function pasteCode(){
+  const input=dialog.querySelector('#transfer-input');if(!input)return;
+  try{
+    if(!navigator.clipboard?.readText)throw Error('clipboard');
+    input.value=await navigator.clipboard.readText();input.focus();
+  }catch{dialog.querySelector('#paste-help').textContent=t('manualPasteHelp');input.focus();}
+}
+function confirmCodeRestore(candidate){
+  const summary=transferSummary(candidate);
+  const labels={monthlyWorkers:'monthlyPayroll',weeklyWorkers:'weeklyPayroll',openEntries:'openEntries',debtRecords:'debtRecords',archivedPeriods:'archivedPeriods'};
+  modal(t('previewRestore'),`<p class="notice">${t('replaceAllNotice')}</p><dl class="salary-breakdown">${Object.entries(summary).map(([key,value])=>`<div><dt>${t(labels[key])}</dt><dd>${num(value)}</dd></div>`).join('')}</dl><div class="actions">${btn(t('cancel'),'dismiss')}<button class="primary" type="submit">${t('restoreAllData')}</button></div>`,async()=>{
+    candidate.revision=state.revision;
+    // Import every copied record; retention cleanup is not part of the restore operation.
+    await persist(candidate);reportContext=null;selected=null;dialog.close();toast(t('allDataRestored'));
+  });
+}
 function download(){const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`workers-ledger-${date()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-document.addEventListener('click',async e=>{const b=e.target.closest('[data-action]');if(!b)return;if(b.closest('form'))b.type='button';const [action,id]=b.dataset.action.split(':');try{if(action==='page'){page=id;if(id==='calc')payrollKind='monthly';if(id==='weekly')payrollKind='weekly';reportContext=null;render();}else if(action==='scope'){payrollKind=id;reportContext=null;render();}else if(action==='dismiss')dialog.close();else if(action==='worker')worker(id);else if(action==='entry')entry(id);else if(action==='add')editWorker();else if(action==='edit')editWorker(id);else if(action==='delete-worker')await requestDeleteWorker(id);else if(action==='close')review();else if(action==='archive')archive(Number(id));else if(action==='delete'&&confirm(t('deleteNote'))){const ledger=structuredClone(activeLedger());ledger.archives.splice(Number(id),1);await persist(replaceLedger(state,ledger));}else if(action==='remove'&&confirm(t('deleteEntry'))){try{await persist(replaceLedger(state,removeEntry(activeLedger(),id)));dialog.close();worker(selected);}catch{toast(t('linked'));}}else if(action==='default-rules'){const prefix=id==='weekly'?'weekly':'monthly';document.querySelector('#'+prefix+'-days').value=prefix==='weekly'?6:30;document.querySelector('#'+prefix+'-hours').value='10.00';document.querySelector('#'+prefix+'-overtime').value=1.5;}else if(action==='update-app')location.assign('./update.html?v='+APP_VERSION);else if(action==='backup')download();else if(action==='restore')document.querySelector('#restore-file').click();else if(action==='print'){buildPrintReport();window.print();}else if(action==='install'){await installPrompt.prompt();installPrompt=null;render();}}catch{toast(t('invalid'));}});
+document.addEventListener('click',async e=>{const b=e.target.closest('[data-action]');if(!b)return;if(b.closest('form'))b.type='button';const [action,id]=b.dataset.action.split(':');try{if(action==='page'){page=id;if(id==='calc')payrollKind='monthly';if(id==='weekly')payrollKind='weekly';reportContext=null;render();}else if(action==='scope'){payrollKind=id;reportContext=null;render();}else if(action==='dismiss')dialog.close();else if(action==='worker')worker(id);else if(action==='entry')entry(id);else if(action==='add')editWorker();else if(action==='edit')editWorker(id);else if(action==='delete-worker')await requestDeleteWorker(id);else if(action==='close')review();else if(action==='archive')archive(Number(id));else if(action==='delete'&&confirm(t('deleteNote'))){const ledger=structuredClone(activeLedger());ledger.archives.splice(Number(id),1);await persist(replaceLedger(state,ledger));}else if(action==='remove'&&confirm(t('deleteEntry'))){try{await persist(replaceLedger(state,removeEntry(activeLedger(),id)));dialog.close();worker(selected);}catch{toast(t('linked'));}}else if(action==='default-rules'){const prefix=id==='weekly'?'weekly':'monthly';document.querySelector('#'+prefix+'-days').value=prefix==='weekly'?6:30;document.querySelector('#'+prefix+'-hours').value='10.00';document.querySelector('#'+prefix+'-overtime').value=1.5;}else if(action==='update-app')location.assign('./update.html?v='+APP_VERSION);else if(action==='copy-all')await copyAllData();else if(action==='import-code')importCodeDialog();else if(action==='paste-code')await pasteCode();else if(action==='backup')download();else if(action==='restore')document.querySelector('#restore-file').click();else if(action==='print'){buildPrintReport();window.print();}else if(action==='install'){await installPrompt.prompt();installPrompt=null;render();}}catch{toast(t('invalid'));}});
 document.addEventListener('toggle',e=>{
   if(!e.target.matches?.('.settings-group,.rule-panel')||!e.target.isConnected)return;
   const key=e.target.dataset.section;

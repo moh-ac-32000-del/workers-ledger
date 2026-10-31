@@ -25,7 +25,7 @@ jobs:
       - name: Prepare static files
         run: |
           mkdir -p dist
-          cp index.html update.html app.js i18n.js ledger.js storage.js report.js style.css sw.js manifest.webmanifest icon.svg icon-192.png icon-512.png dist/
+          cp index.html update.html app.js i18n.js ledger.js storage.js report.js transfer.js style.css sw.js manifest.webmanifest icon.svg icon-192.png icon-512.png dist/
           touch dist/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
