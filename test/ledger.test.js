@@ -178,3 +178,27 @@ test('reopening cannot erase a carried debt which has already been repaid',async
 test('parked periods and prior payment metadata survive full clipboard backup',async()=>{
   const {selectPeriod}=await import('../ledger.js');const {createTransferCode,parseTransferCode,transferSummary}=await import('../transfer.js');let s=fixture();tx(s,'late',.5);s=selectPeriod(s,'2026-12');tx(s,'overtime',1.5);assert.deepEqual(parseTransferCode(createTransferCode(s)),s);assert.equal(transferSummary(s).openEntries,2);assert.equal(valid(s),true);
 });
+test('legacy clipboard import tolerates direction marks, missing display prefix and code fences',async()=>{
+  const {createTransferCode,parseTransferCode,TRANSFER_PREFIX}=await import('../transfer.js');const s=fixture(),code=createTransferCode(s);
+  assert.deepEqual(parseTransferCode('\u200f'+code+'\u200e'),s);
+  assert.deepEqual(parseTransferCode(code.slice(TRANSFER_PREFIX.length)),s);
+  assert.deepEqual(parseTransferCode('```text\n'+code.match(/.{1,60}/g).join('\n')+'\n```'),s);
+});
+test('compressed backup round-trips all saved information and is shorter for long records',async()=>{
+  const {createTransferCode,createPortableTransferCode,parsePortableTransferCode,COMPACT_PREFIX}=await import('../transfer.js');const s=fixture();tx(s,'late',.5);s.month.entries[0].note='ملاحظات العامل والتأخير والمسائي والديون '.repeat(3000);
+  const compact=await createPortableTransferCode(s);assert.ok(compact.startsWith(COMPACT_PREFIX));assert.ok(compact.length<createTransferCode(s).length/4);assert.deepEqual(await parsePortableTransferCode(compact),s);assert.deepEqual(await parsePortableTransferCode('\u200f'+compact.match(/.{1,77}/g).join('\n')+'\u200e'),s);
+});
+test('incomplete backup has an explicit diagnostic and never yields a partial ledger',async()=>{
+  const {createTransferCode,createPortableTransferCode,parsePortableTransferCode,parseTransferCode}=await import('../transfer.js');const s=fixture();const compact=await createPortableTransferCode(s),legacy=createTransferCode(s);
+  await assert.rejects(parsePortableTransferCode(compact.slice(0,-16)),error=>error.code==='backup-incomplete');
+  assert.throws(()=>parseTransferCode(legacy.slice(0,-16)),error=>error.code==='backup-incomplete');
+  await assert.rejects(parsePortableTransferCode(''),error=>error.code==='backup-empty');
+});
+test('compressed backup corruption is rejected and legacy JSON files remain supported',async()=>{
+  const {createPortableTransferCode,parsePortableTransferCode}=await import('../transfer.js');const s=fixture(),code=await createPortableTransferCode(s);const index=code.lastIndexOf(':')+20;const corrupted=code.slice(0,index)+(code[index]==='A'?'B':'A')+code.slice(index+1);
+  await assert.rejects(parsePortableTransferCode(corrupted));assert.deepEqual(await parsePortableTransferCode(JSON.stringify(s)),s);
+});
+
+test('clipboard truncation at 20000 characters rejects partial data and compact backup restores all',async()=>{
+  const {createTransferCode,createPortableTransferCode,parsePortableTransferCode}=await import('../transfer.js');const s=fixture();tx(s,'late',.5);s.month.entries[0].note='long-transport-record-'.repeat(2000);const old=createTransferCode(s);assert.ok(old.length>20000);await assert.rejects(parsePortableTransferCode(old.slice(0,20000)),error=>error.code==='backup-incomplete');const compact=await createPortableTransferCode(s);assert.ok(compact.length<20000);assert.deepEqual(await parsePortableTransferCode(compact),s);
+});

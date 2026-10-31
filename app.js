@@ -1,9 +1,9 @@
-import {createTransferCode,parseTransferCode,transferSummary} from './transfer.js';
+import {createPortableTransferCode,parsePortableTransferCode,transferSummary} from './transfer.js';
 import {createReports} from './report.js';
 import {totals,debt,addEntry,closeMonth,cleanup,round,removeEntry,parseWorkDuration,removeWorker,periodRules,DEFAULT_MONTHLY_RULES,setMonthlyRules,workDurationParts,DEFAULT_WEEKLY_RULES,setWeeklyRules,createWeeklyLedger,closeWeek,dateInPeriod,addCalendarDays,calendarMonthBounds,selectPeriod,periodWorkers,weekStart,validIsoDate} from './ledger.js';
 import {openStore,read,write,valid} from './storage.js';
 import {translate} from './i18n.js';
-const APP_VERSION='10';
+const APP_VERSION='11';
 const app=document.querySelector('#app'),dialog=document.querySelector('#dialog');
 let newerVersionAvailable=false;
 let payrollKind='monthly';
@@ -159,12 +159,12 @@ function review(){if(!payrollWorkers().length)return;modal(t('review'),`<p class
 async function copyAllData(){
   // Read the latest stored snapshot so another window's saved records are included.
   const latest=await read();
-  const code=createTransferCode(latest??state);
+  const code=await createPortableTransferCode(latest??state);
   try{
     if(!navigator.clipboard?.writeText)throw Error('clipboard');
-    await navigator.clipboard.writeText(code);toast(t('allDataCopied'));
+    await navigator.clipboard.writeText(code);toast(t('allDataCopied')+' · '+num(code.length)+' '+t('codeCharacters'));
   }catch{
-    modal(t('copyAllData'),`<p class="settings-help">${t('manualCopyHelp')}</p><label for="manual-copy-text">${t('fullDataCode')}</label><textarea id="manual-copy-text" readonly dir="ltr" spellcheck="false">${esc(code)}</textarea><div class="actions"><button type="button" id="manual-copy-button" class="primary">${t('copyAllData')}</button>${btn(t('cancel'),'dismiss')}</div>`);
+    modal(t('copyAllData'),`<p class="settings-help">${t('manualCopyHelp')} (${num(code.length)} ${t('codeCharacters')})</p><label for="manual-copy-text">${t('fullDataCode')}</label><textarea id="manual-copy-text" readonly dir="ltr" spellcheck="false">${esc(code)}</textarea><div class="actions"><button type="button" id="manual-copy-button" class="primary">${t('copyAllData')}</button>${btn(t('cancel'),'dismiss')}</div>`);
     const input=dialog.querySelector('#manual-copy-text');input.focus();input.select();
     dialog.querySelector('#manual-copy-button').onclick=()=>{
       input.focus();input.select();input.setSelectionRange(0,input.value.length);
@@ -173,18 +173,19 @@ async function copyAllData(){
   }
 }
 function importCodeDialog(){
-  modal(t('pasteAllData'),`<p class="settings-help">${t('pasteAllDescription')}</p><label for="transfer-input">${t('fullDataCode')}</label><textarea id="transfer-input" name="code" required dir="ltr" spellcheck="false" autocomplete="off" placeholder="WORKERS-LEDGER-1:…"></textarea><p id="paste-help" class="settings-help" role="status"></p><div class="actions">${btn(t('pasteClipboard'),'paste-code')}<button class="primary" type="submit">${t('previewRestore')}</button>${btn(t('cancel'),'dismiss')}</div>`,f=>{
+  modal(t('pasteAllData'),`<p class="settings-help">${t('pasteAllDescription')}</p><label for="transfer-input">${t('fullDataCode')}</label><textarea id="transfer-input" name="code" required dir="ltr" spellcheck="false" autocomplete="off" placeholder="WORKERS-LEDGER-…"></textarea><p id="code-length" class="settings-help" role="status"></p><p id="paste-help" class="settings-help" role="status"></p><div class="actions">${btn(t('pasteClipboard'),'paste-code')}<button class="primary" type="submit">${t('previewRestore')}</button>${btn(t('cancel'),'dismiss')}</div>`,async f=>{
     let candidate;
-    try{candidate=parseTransferCode(f.get('code'));}catch{dialog.querySelector('#form-error').textContent=t('restoreError');return;}
+    try{candidate=await parsePortableTransferCode(f.get('code'));}catch(error){const key={'backup-empty':'backupEmpty','backup-incomplete':'backupIncomplete','backup-format':'backupFormat','backup-schema':'backupSchema','backup-version':'backupVersion'}[error.code]??'restoreError';dialog.querySelector('#form-error').textContent=t(key);return;}
     dialog.close();confirmCodeRestore(candidate);
   });
-  dialog.querySelector('#transfer-input').focus();
+  const input=dialog.querySelector('#transfer-input');input.oninput=updateCodeLength;input.focus();
 }
+function updateCodeLength(){const input=dialog.querySelector('#transfer-input'),output=dialog.querySelector('#code-length');if(input&&output)output.textContent=t('codeLength')+': '+num(input.value.length)+' '+t('codeCharacters');}
 async function pasteCode(){
   const input=dialog.querySelector('#transfer-input');if(!input)return;
   try{
     if(!navigator.clipboard?.readText)throw Error('clipboard');
-    input.value=await navigator.clipboard.readText();input.focus();
+    input.value=await navigator.clipboard.readText();updateCodeLength();input.focus();
   }catch{dialog.querySelector('#paste-help').textContent=t('manualPasteHelp');input.focus();}
 }
 function confirmCodeRestore(candidate){
