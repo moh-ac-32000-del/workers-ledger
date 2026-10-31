@@ -1,9 +1,9 @@
-import {createPortableTransferCode,parsePortableTransferCode,transferSummary} from './transfer.js';
+import {createPortableTransferCode,parsePortableTransferCode,transferSummary,prepareRestore} from './transfer.js';
 import {createReports} from './report.js';
 import {totals,debt,addEntry,closeMonth,cleanup,round,removeEntry,parseWorkDuration,removeWorker,periodRules,DEFAULT_MONTHLY_RULES,setMonthlyRules,workDurationParts,DEFAULT_WEEKLY_RULES,setWeeklyRules,createWeeklyLedger,closeWeek,dateInPeriod,addCalendarDays,calendarMonthBounds,selectPeriod,periodWorkers,weekStart,validIsoDate} from './ledger.js';
 import {openStore,read,write,valid} from './storage.js';
 import {translate} from './i18n.js';
-const APP_VERSION='11';
+const APP_VERSION='12';
 const app=document.querySelector('#app'),dialog=document.querySelector('#dialog');
 let newerVersionAvailable=false;
 let payrollKind='monthly';
@@ -192,7 +192,7 @@ function confirmCodeRestore(candidate){
   const summary=transferSummary(candidate);
   const labels={monthlyWorkers:'monthlyPayroll',weeklyWorkers:'weeklyPayroll',openEntries:'openEntries',debtRecords:'debtRecords',archivedPeriods:'archivedPeriods'};
   modal(t('previewRestore'),`<p class="notice">${t('replaceAllNotice')}</p><dl class="salary-breakdown">${Object.entries(summary).map(([key,value])=>`<div><dt>${t(labels[key])}</dt><dd>${num(value)}</dd></div>`).join('')}</dl><div class="actions">${btn(t('cancel'),'dismiss')}<button class="primary" type="submit">${t('restoreAllData')}</button></div>`,async()=>{
-    candidate.revision=state.revision;
+    candidate=prepareRestore(candidate,state);
     // Import every copied record; retention cleanup is not part of the restore operation.
     await persist(candidate);reportContext=null;selected=null;dialog.close();toast(t('allDataRestored'));
   });
@@ -232,7 +232,7 @@ document.addEventListener('change',async e=>{
     select.value=state.settings.theme;appearance();toast(t('invalid'));
   }finally{select.disabled=false;}
 });
-document.addEventListener('change',async e=>{if(e.target.id!=='restore-file'||!e.target.files[0])return;try{const next=JSON.parse(await e.target.files[0].text());if(!valid(next))throw Error();if(confirm(t('restoreNote'))){next.revision=state.revision;await persist(cleanup(next));}}catch{toast(t('restoreError'));}e.target.value='';});
+document.addEventListener('change',async e=>{if(e.target.id!=='restore-file'||!e.target.files[0])return;try{const next=JSON.parse(await e.target.files[0].text());if(!valid(next))throw Error();if(confirm(t('restoreNote'))){await persist(prepareRestore(next,state));}}catch{toast(t('restoreError'));}e.target.value='';});
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;if(state)render();});
 matchMedia('(prefers-color-scheme:dark)').addEventListener('change',()=>state&&appearance());
 try{await openStore();state=await read()??{version:1,workers:[],debts:[],archives:[],month:{key:date().slice(0,7),entries:[],salaries:{}},settings:{lang:'ar',theme:'system',retention:365,autoDelete:false}};if(!valid(state))throw Error();normalizeState(state);await persist(cleanup(state));navigator.storage?.persist?.();if('serviceWorker'in navigator)startUpdates();}catch{app.textContent='تعذر فتح البيانات المحلية. يرجى السماح بالتخزين وإعادة المحاولة. / Local storage unavailable. Please enable storage and retry.';}

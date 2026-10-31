@@ -86,3 +86,11 @@ export function transferSummary(state){
     archivedPeriods:state.archives.length+(week?.archives.length??0),
   };
 }
+
+// Device preferences are local; payroll rules belong to the transferred ledger.
+export function prepareRestore(candidate,current){
+  const next=structuredClone(candidate);
+  for(const key of ['lang','theme','retention','autoDelete'])next.settings[key]=current.settings[key];
+  next.revision=current.revision;
+  return next;
+}

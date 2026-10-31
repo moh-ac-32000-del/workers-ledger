@@ -202,3 +202,7 @@ test('compressed backup corruption is rejected and legacy JSON files remain supp
 test('clipboard truncation at 20000 characters rejects partial data and compact backup restores all',async()=>{
   const {createTransferCode,createPortableTransferCode,parsePortableTransferCode}=await import('../transfer.js');const s=fixture();tx(s,'late',.5);s.month.entries[0].note='long-transport-record-'.repeat(2000);const old=createTransferCode(s);assert.ok(old.length>20000);await assert.rejects(parsePortableTransferCode(old.slice(0,20000)),error=>error.code==='backup-incomplete');const compact=await createPortableTransferCode(s);assert.ok(compact.length<20000);assert.deepEqual(await parsePortableTransferCode(compact),s);
 });
+
+test('restore preserves receiving device preferences and imports payroll rules and records',async()=>{
+ const {prepareRestore}=await import('../transfer.js');const source=fixture(),local=fixture();source.settings={...source.settings,lang:'tr',theme:'dark',retention:35,autoDelete:true,weeklyRules:{days:5.5,hoursPerDay:8,overtimeMultiplier:2}};local.settings={...local.settings,lang:'en',theme:'light',retention:365,autoDelete:false};local.revision=7;const before=structuredClone(source),restored=prepareRestore(source,local);assert.deepEqual(restored.settings,{...source.settings,lang:'en',theme:'light',retention:365,autoDelete:false});assert.deepEqual(restored.month,source.month);assert.deepEqual(restored.debts,source.debts);assert.equal(restored.revision,7);assert.deepEqual(source,before);
+});
