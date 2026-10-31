@@ -29,7 +29,7 @@ export function transferSummary(state){
   return {
     monthlyWorkers:state.workers.length,
     weeklyWorkers:week?.workers.length??0,
-    openEntries:state.month.entries.length+(week?.month.entries.length??0),
+    openEntries:state.month.entries.length+(week?.month.entries.length??0)+Object.values(state.openPeriods??{}).reduce((n,p)=>n+p.entries.length,0)+Object.values(week?.openPeriods??{}).reduce((n,p)=>n+p.entries.length,0),
     debtRecords:state.debts.length+(week?.debts.length??0),
     archivedPeriods:state.archives.length+(week?.archives.length??0),
   };

@@ -158,3 +158,23 @@ test('paste accepts existing JSON backups and rejects malformed or other-app cod
   const {parseTransferCode,TRANSFER_PREFIX}=await import('../transfer.js');const s=fixture();assert.deepEqual(parseTransferCode(JSON.stringify(s)),s);
   for(const code of ['',TRANSFER_PREFIX+'???',TRANSFER_PREFIX+btoa(JSON.stringify({format:'other-app',version:1,data:s})),TRANSFER_PREFIX+btoa(JSON.stringify({format:'workers-ledger',version:2,data:s})),JSON.stringify({...s,workers:[{id:'w',name:'bad',salary:-1}]})])assert.throws(()=>parseTransferCode(code));
 });
+test('selecting October preserves the open December period and records October 31',async()=>{
+  const {selectPeriod}=await import('../ledger.js');const s=fixture();s.month.key='2026-12';s.month.entries=[{id:'dec',workerId:'w',type:'advance',value:100,date:'2026-12-01'}];const original=structuredClone(s.month);
+  let next=selectPeriod(s,'2026-10');addEntry(next,{id:'oct',workerId:'w',type:'late',value:3,date:'2026-10-31'});assert.equal(next.month.key,'2026-10');assert.equal(totals(next.workers[0],next.month).late,9);assert.deepEqual(next.openPeriods['2026-12'],original);assert.deepEqual(s.month,original);assert.equal(valid(next),true);
+  next=selectPeriod(next,'2026-12');assert.deepEqual(next.month,original);assert.equal(next.openPeriods['2026-10'].entries[0].date,'2026-10-31');
+});
+test('reopening a paid month preserves prior pay and never pays the full salary twice',async()=>{
+  const {selectPeriod}=await import('../ledger.js');let s=fixture();closeMonth(s);closeMonth(s);const december=structuredClone(s.month);
+  s=selectPeriod(s,'2026-10',{reopen:true});assert.equal(totals(s.workers[0],s.month).payable,0);addEntry(s,{id:'late',workerId:'w',type:'late',value:3,date:'2026-10-31'});assert.equal(totals(s.workers[0],s.month).deficit,9);assert.equal(s.month.settlementHistory[0].workers[0].paidTotal,900);closeMonth(s);
+  assert.equal(s.month.key,'2026-12');assert.deepEqual(s.month,december);assert.equal(debt(s,'w'),509);const october=s.archives.find(a=>a.key==='2026-10');assert.equal(october.workers[0].payable,0);assert.equal(october.workers[0].paidTotal,900);
+  s=selectPeriod(s,'2026-10',{reopen:true});assert.equal(debt(s,'w'),500);assert.equal(s.month.settlementHistory.length,2);assert.equal(valid(s),true);
+});
+test('accidental closing can be explicitly corrected without discarding its history',async()=>{
+  const {selectPeriod}=await import('../ledger.js');let s=fixture();closeMonth(s);assert.throws(()=>selectPeriod(s,'2026-10'),/closed-period/);s=selectPeriod(s,'2026-10',{reopen:true,undoPaid:true});assert.equal(totals(s.workers[0],s.month).payable,900);assert.equal(s.month.settlementHistory.length,1);assert.equal(s.month.paymentCorrection.reason,'accidental-close-no-payment');
+});
+test('reopening cannot erase a carried debt which has already been repaid',async()=>{
+  const {selectPeriod}=await import('../ledger.js');const s=fixture();tx(s,'advance',1000);closeMonth(s);tx(s,'cash',600);const before=structuredClone(s);assert.throws(()=>selectPeriod(s,'2026-10',{reopen:true}),/settled-period-debt/);assert.deepEqual(s,before);
+});
+test('parked periods and prior payment metadata survive full clipboard backup',async()=>{
+  const {selectPeriod}=await import('../ledger.js');const {createTransferCode,parseTransferCode,transferSummary}=await import('../transfer.js');let s=fixture();tx(s,'late',.5);s=selectPeriod(s,'2026-12');tx(s,'overtime',1.5);assert.deepEqual(parseTransferCode(createTransferCode(s)),s);assert.equal(transferSummary(s).openEntries,2);assert.equal(valid(s),true);
+});
