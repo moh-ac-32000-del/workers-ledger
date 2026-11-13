@@ -241,3 +241,12 @@ test('salary update also updates an already-created next open period without rep
  assert.equal(next.openPeriods['2026-11'].salaries.w,1300);
  assert.equal(s.openPeriods['2026-11'].salaries.w,900);
 });
+
+test('legacy archived salary summaries show zero additional amounts instead of NaN',async()=>{
+ const {createReports}=await import('../report.js');
+ const reports=createReports({t:k=>k,num:String,esc:String,amount:String,btn:()=>''});
+ const html=reports.salarySummary({salary:900,overtime:0,absence:0,late:0,advances:0,deduction:0});
+ assert.match(html,/extra/);
+ assert.match(html,/>0<\/dd>/);
+ assert.doesNotMatch(html,/NaN/);
+});
