@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {totals,debt,addEntry,closeMonth,cleanup} from '../ledger.js';
+import {totals,debt,addEntry,closeMonth,cleanup,setWorkerSalary} from '../ledger.js';
 import {valid} from '../storage.js';
 const fixture=()=>({version:1,workers:[{id:'w',name:'Ali',salary:900}],month:{key:'2026-10',salaries:{w:900},entries:[]},debts:[{id:'o',workerId:'w',type:'opening',value:500,date:'2026-10-01'}],archives:[],settings:{lang:'ar',theme:'system',retention:365,autoDelete:false}});
 const tx=(s,type,value,extra={})=>addEntry(s,{id:crypto.randomUUID(),workerId:'w',type,value,date:'2026-10-02',note:'',...extra});
-test('salary, full-day absence, fractional delay and overtime',()=>{const s=fixture();tx(s,'absence',2);tx(s,'late',1.5);tx(s,'overtime',2.5);assert.deepEqual(totals(s.workers[0],s.month),{salary:900,absence:60,late:4.5,overtime:11.25,advances:0,deduction:0,net:846.75,payable:846.75,deficit:0});assert.throws(()=>tx(s,'absence',0.5));});
+test('salary, full-day absence, fractional delay and overtime',()=>{const s=fixture();tx(s,'absence',2);tx(s,'late',1.5);tx(s,'overtime',2.5);assert.deepEqual(totals(s.workers[0],s.month),{salary:900,absence:60,late:4.5,overtime:11.25,extra:0,advances:0,deduction:0,net:846.75,payable:846.75,deficit:0});assert.throws(()=>tx(s,'absence',0.5));});
 test('manual deduction and cash repayment are separate',()=>{const s=fixture();tx(s,'advance',200);tx(s,'deduct',100);tx(s,'cash',50);assert.equal(totals(s.workers[0],s.month).payable,600);assert.equal(debt(s,'w'),350);assert.throws(()=>tx(s,'cash',351));});
 test('partial conversion releases salary and creates debt once',()=>{const s=fixture();tx(s,'advance',1000);const sourceId=s.month.entries[0].id;tx(s,'convert',300,{sourceId});assert.equal(totals(s.workers[0],s.month).payable,200);assert.equal(debt(s,'w'),800);assert.throws(()=>tx(s,'convert',701,{sourceId}));assert.throws(()=>tx(s,'convert',1,{sourceId:'missing'}));});
 test('closing pays positive balances, carries deficit and freezes salary',()=>{const s=fixture();tx(s,'advance',1100);s.workers[0].salary=1200;assert.equal(totals(s.workers[0],s.month).salary,900);closeMonth(s,'2026-11-01T00:00:00Z');assert.equal(s.archives[0].workers[0].deficit,200);assert.equal(debt(s,'w'),700);assert.equal(s.month.key,'2026-11');assert.equal(totals(s.workers[0],s.month).salary,1200);assert.equal(s.month.entries.length,0);assert.equal(s.archives[0].workers[0].salary,900);});
@@ -211,4 +211,33 @@ test('editing time preserves identity and updates calculation without mutating o
 });
 test('editing linked advances and conversions preserves debt constraints and mirrored records',async()=>{
  const {updateEntry}=await import('../ledger.js');const s=fixture();tx(s,'advance',200);const id=s.month.entries[0].id;tx(s,'convert',100,{sourceId:id});const conversion=s.month.entries[1].id;assert.throws(()=>updateEntry(s,id,{value:50,date:'2026-10-03'}));const next=updateEntry(s,id,{value:250,date:'2026-10-03'});assert.equal(totals(next.workers[0],next.month).advances,150);const changed=updateEntry(next,conversion,{value:150,date:'2026-10-04',note:'edit'});assert.equal(debt(changed,'w'),650);assert.equal(changed.debts.find(e=>e.id===conversion).note,'edit');assert.equal(changed.month.entries[1].value,150);tx(changed,'cash',650);assert.throws(()=>updateEntry(changed,conversion,{value:50,date:'2026-10-04'}));
+});
+
+test('additional amounts increase the current period payable without changing debt',()=>{
+ const s=fixture(),before=debt(s,'w');
+ tx(s,'extra',250,{note:'Bonus'});
+ assert.equal(totals(s.workers[0],s.month).extra,250);
+ assert.equal(totals(s.workers[0],s.month).payable,1150);
+ assert.equal(debt(s,'w'),before);
+ closeMonth(s,'2026-11-01T00:00:00Z');
+ assert.equal(s.archives[0].workers[0].extra,250);
+ assert.equal(s.archives[0].workers[0].payable,1150);
+});
+test('salary changes can apply immediately to the open period or from next period',()=>{
+ const s=fixture();
+ const next=setWorkerSalary(s,'w',1200,'next');
+ assert.equal(next.workers[0].salary,1200);
+ assert.equal(next.month.salaries.w,900);
+ assert.equal(totals(next.workers[0],next.month).salary,900);
+ const current=setWorkerSalary(s,'w',1200,'current');
+ assert.equal(current.month.salaries.w,1200);
+ assert.equal(totals(current.workers[0],current.month).salary,1200);
+ assert.equal(s.month.salaries.w,900);
+});
+test('salary update also updates an already-created next open period without repricing prior months',()=>{
+ const s=fixture();s.openPeriods={'2026-11':{key:'2026-11',kind:'monthly',salaries:{w:900},entries:[],rules:{days:30,hoursPerDay:10,overtimeMultiplier:1.5}}};
+ const next=setWorkerSalary(s,'w',1300,'next');
+ assert.equal(next.month.salaries.w,900);
+ assert.equal(next.openPeriods['2026-11'].salaries.w,1300);
+ assert.equal(s.openPeriods['2026-11'].salaries.w,900);
 });
