@@ -27,4 +27,4 @@ function validLedger(s,weekly){
     &&(s.openPeriods===undefined||s.openPeriods&&typeof s.openPeriods==='object'&&!Array.isArray(s.openPeriods)&&Object.entries(s.openPeriods).every(([key,period])=>key===period.key&&key!==s.month.key&&validPeriod(period,weekly)))
     &&Array.isArray(s.archives)&&s.archives.every(a=>a&&(a.rules===undefined||validRules(a.rules))&&typeof a.key==='string'&&Number.isFinite(Date.parse(a.closedAt))&&Array.isArray(a.workers)&&a.workers.every(w=>w&&typeof w.name==='string'&&Number.isFinite(w.payable))&&Array.isArray(a.entries)&&a.entries.every(tx));
 }
-function tx(x){return x&&typeof x.id==='string'&&typeof x.workerId==='string'&&['opening','absence','late','overtime','advance','convert','deduct','cash','deficit'].includes(x.type)&&Number.isFinite(x.value)&&x.value>0&&typeof x.date==='string';}
+function tx(x){return x&&typeof x.id==='string'&&typeof x.workerId==='string'&&['opening','absence','late','overtime','extra','advance','convert','deduct','cash','deficit'].includes(x.type)&&Number.isFinite(x.value)&&x.value>0&&typeof x.date==='string';}

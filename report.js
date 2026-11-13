@@ -26,12 +26,12 @@ export function createReports({t, num, esc, amount, btn}) {
     return `<div class="attendance-grid">${attendanceTypes.map(type => `<div class="attendance-card" data-attendance="${type}"><span>${t(type)}</span><strong>${quantity(type, counts[type])}</strong><small>${t(type === 'overtime' ? 'addition' : 'deductionAmount')}: ${amount(entryAmount({type, value: counts[type]}, salary, rules))}</small></div>`).join('')}</div>`;
   }
   function salarySummary(s) {
-    const rows = [['salary', s.salary], ['overtime', s.overtime], ['absence', s.absence], ['late', s.late], ['advance', s.advances], ['deduct', s.deduction]];
+    const rows = [['salary', s.salary], ['overtime', s.overtime], ['extra', s.extra], ['absence', s.absence], ['late', s.late], ['advance', s.advances], ['deduct', s.deduction]];
     const body=`<dl class="salary-breakdown">${rows.map(([key,value])=>`<div><dt>${t(key)}</dt><dd>${amount(value)}</dd></div>`).join('')}</dl>`;
     return `<details class="profile-section salary-details screen-only"><summary><span>${t('salaryBreakdown')}</span><strong>${amount(s.salary)}</strong></summary>${body}</details><section class="profile-section print-only"><h3>${t('salaryBreakdown')}</h3>${body}</section>`;
   }
   function activityGroups(entries, salary, editable = false, rules=DEFAULT_MONTHLY_RULES) {
-    const types = [...attendanceTypes, 'advance', 'convert', 'deduct', 'cash'];
+    const types = [...attendanceTypes, 'extra', 'advance', 'convert', 'deduct', 'cash'];
     return types.map(type => {
       const group = entries.filter(e => e.type === type).toSorted((a,b)=>a.date.localeCompare(b.date));
       if (!group.length && !attendanceTypes.includes(type)) return '';
