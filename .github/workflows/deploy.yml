@@ -32,6 +32,8 @@ jobs:
         with:
           path: dist
           name: github-pages-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Wait for Pages artifact registration
+        run: sleep 10
       - uses: actions/deploy-pages@v4
         id: deployment
         with:
