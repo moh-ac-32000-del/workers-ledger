@@ -48,3 +48,15 @@ textarea{font:inherit;width:100%;min-height:150px;max-height:40dvh;resize:vertic
 .period-picker{min-height:40px;cursor:pointer;font-size:12px}.pending-deficit{font-size:12px;color:var(--red);padding:10px;border:1px solid var(--line);border-radius:10px}#period-key{font-size:16px}#date{min-width:0;font-size:16px;color-scheme:inherit}
 
 .lock-settings{border-block-start:1px solid var(--line);margin-block:16px;padding-block:12px}#lock-screen{position:fixed;inset:0;margin:0;max-width:none;max-height:none;width:100%;height:100dvh;border:0;border-radius:0;background:var(--bg);color:var(--ink);padding:24px;overflow:auto}#lock-screen::backdrop{background:var(--bg)}.lock-card{width:min(100%,320px);margin:3vh auto;text-align:center}.lock-symbol{color:var(--blue);font-size:46px;margin-bottom:20px}.lock-card input{text-align:center;font-size:26px;letter-spacing:12px;width:100%;margin-block:10px}.lock-card>[type=submit]{width:100%}.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:20px}.pin-pad button{font-size:26px;min-height:58px;border-radius:20px}.app-locked{overflow:hidden}.app-locked #app,.app-locked #dialog,.app-locked #toast,.app-locked .update-notice{visibility:hidden!important}@media print{body.app-locked>*{display:none!important}body.app-locked #lock-screen{display:block!important;position:static}}
+
+/* Monthly operation log: a compact, horizontally scrollable ledger table. */
+.operation-log{margin-top:20px;padding-top:14px;border-top:1px solid var(--line)}
+.operation-log>h3{font-size:15px;margin:0 0 12px}
+.operation-log-table{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.operation-log-table table{width:100%;min-width:520px;border-collapse:collapse}
+.operation-log-table th,.operation-log-table td{padding:11px 10px;text-align:start;border-bottom:1px solid var(--line);font-size:12px;white-space:nowrap}
+.operation-log-table th{color:var(--muted);font-weight:600;background:var(--soft)}
+.operation-log-table tbody tr:last-child td{border-bottom:0}
+.operation-log-table time{font-variant-numeric:tabular-nums}
+.operation-deduction{color:var(--red)}
+.operation-addition{color:var(--green,var(--blue))}
