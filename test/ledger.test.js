@@ -250,3 +250,17 @@ test('legacy archived salary summaries show zero additional amounts instead of N
  assert.match(html,/>0<\/dd>/);
  assert.doesNotMatch(html,/NaN/);
 });
+
+test('monthly operation log sorts oldest first and shows signed monetary impact',async()=>{
+  const {monthlyOperations}=await import('../report.js');
+  const s=fixture();
+  tx(s,'absence',2,{date:'2026-10-04'});
+  tx(s,'overtime',1.5,{date:'2026-10-03'});
+  tx(s,'extra',25,{date:'2026-10-05'});
+  tx(s,'advance',40,{date:'2026-10-06'});
+  tx(s,'cash',50,{date:'2026-10-02'});
+  const rows=monthlyOperations({workers:s.workers,month:s.month,debts:s.debts});
+  assert.deepEqual(rows.map(row=>row.type),['cash','overtime','absence','extra','advance']);
+  assert.deepEqual(rows.map(row=>row.amount),[50,6.75,-60,25,-40]);
+  assert.ok(rows.every(row=>row.workerName==='Ali'));
+});
