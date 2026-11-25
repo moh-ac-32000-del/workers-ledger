@@ -14,7 +14,7 @@ export function entryAmount(entry, salary, rules=DEFAULT_MONTHLY_RULES) {
 }
 
 
-export function monthlyOperations({workers,month,debts=[]}) {
+export function monthlyOperations({workers,month,debts=[],rules=month.rules??DEFAULT_MONTHLY_RULES}) {
   const byId=new Map(workers.map(worker=>[worker.id,worker]));
   const entries=[...month.entries,...debts.filter(entry=>entry.type==='cash'&&entry.month===month.key)];
   const signs={absence:-1,late:-1,advance:-1,deduct:-1,overtime:1,extra:1,convert:1,cash:1};
@@ -22,7 +22,7 @@ export function monthlyOperations({workers,month,debts=[]}) {
     const worker=byId.get(entry.workerId);
     if(!worker)return null;
     const salary=month.salaries?.[worker.id]??worker.salary;
-    return {...entry,workerName:worker.name,amount:round(entryAmount(entry,salary,month.rules)*(signs[entry.type]??1)),_order:index};
+    return {...entry,workerName:worker.name,amount:round(entryAmount(entry,salary,rules)*(signs[entry.type]??1)),_order:index};
   }).filter(Boolean).sort((a,b)=>a.date.localeCompare(b.date)||a._order-b._order).map(({_order,...entry})=>entry);
 }
 
