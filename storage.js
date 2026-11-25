@@ -7,7 +7,7 @@ export function valid(s){
   if(s?.version!==1||!validLedger(s,false))return false;
   const settings=s.settings;
   return !!settings&&['ar','tr','en'].includes(settings.lang)&&['light','dark','system'].includes(settings.theme)
-    &&Number.isInteger(settings.retention)&&settings.retention>=0&&typeof settings.autoDelete==='boolean'
+    &&Number.isInteger(settings.retention)&&settings.retention>=0&&typeof settings.autoDelete==='boolean'&&(settings.operationLogOrder===undefined||['oldestFirst','newestFirst','alphabetical'].includes(settings.operationLogOrder))
     &&(settings.monthlyRules===undefined||validRules(settings.monthlyRules)&&Number.isInteger(settings.monthlyRules.days)&&settings.monthlyRules.days<=31)
     &&(settings.weeklyRules===undefined||validRules(settings.weeklyRules)&&settings.weeklyRules.days<=7)
     &&(s.weekly===undefined||validLedger(s.weekly,true));
