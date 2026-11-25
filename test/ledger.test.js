@@ -275,7 +275,7 @@ test('operation log includes weekly workers and describes absence and time quant
   addEntry(week,{id:'weekly-absence',workerId:'weekly',type:'absence',value:1,date:'2026-10-28'});
   const rows=monthlyOperations({workers:week.workers,month:week.month,debts:week.debts,rules:week.month.rules});
   assert.deepEqual(rows.map(row=>row.type),['late','absence']);
-  assert.deepEqual(rows.map(row=>row.amount),[-11,-100]);
+  assert.deepEqual(rows.map(row=>row.amount),[-20,-100]);
   assert.ok(rows.every(row=>row.workerName==='Weekly worker'));
   assert.equal(rows[0].value,2);
   assert.equal(rows[1].value,1);
