@@ -26,6 +26,17 @@ export function monthlyOperations({workers,month,debts=[],rules=month.rules??DEF
   }).filter(Boolean).sort((a,b)=>a.date.localeCompare(b.date)||a._order-b._order).map(({_order,...entry})=>entry);
 }
 
+
+export function sortMonthlyOperations(rows,order='oldestFirst',locale='ar') {
+  const copy=[...rows];
+  if(order==='newestFirst')return copy.sort((a,b)=>b.date.localeCompare(a.date));
+  if(order==='alphabetical'){
+    const collator=new Intl.Collator(locale,{sensitivity:'base',numeric:true});
+    return copy.sort((a,b)=>collator.compare(a.workerName,b.workerName)||a.date.localeCompare(b.date));
+  }
+  return copy.sort((a,b)=>a.date.localeCompare(b.date));
+}
+
 export function createReports({t, num, esc, amount, btn}) {
   const quantity = (type, value) => {
     if(type==='absence')return `${num(value)} ${t('dayUnit')}`;

@@ -1,10 +1,10 @@
 import {initializeLock,lockSettings} from './lock.js';
 import {createPortableTransferCode,parsePortableTransferCode,transferSummary,prepareRestore} from './transfer.js';
-import {createReports,monthlyOperations} from './report.js';
+import {createReports,monthlyOperations,sortMonthlyOperations} from './report.js';
 import {totals,debt,addEntry,closeMonth,cleanup,round,removeEntry,updateEntry,parseWorkDuration,removeWorker,setWorkerSalary,periodRules,DEFAULT_MONTHLY_RULES,setMonthlyRules,workDurationParts,DEFAULT_WEEKLY_RULES,setWeeklyRules,createWeeklyLedger,closeWeek,dateInPeriod,addCalendarDays,calendarMonthBounds,selectPeriod,periodWorkers,weekStart,validIsoDate} from './ledger.js';
 import {openStore,read,write,valid} from './storage.js';
 import {translate} from './i18n.js';
-const APP_VERSION='19';
+const APP_VERSION='20';
 const app=document.querySelector('#app'),dialog=document.querySelector('#dialog');
 let newerVersionAvailable=false;
 let payrollKind='monthly';
@@ -25,7 +25,7 @@ function replaceLedger(root,updated,kind=payrollKind){
   return next;
 }
 function normalizeState(root){
-  root.settings.monthlyRules??={...DEFAULT_MONTHLY_RULES};root.settings.weeklyRules??={...DEFAULT_WEEKLY_RULES};
+  root.settings.operationLogOrder??='oldestFirst';root.settings.monthlyRules??={...DEFAULT_MONTHLY_RULES};root.settings.weeklyRules??={...DEFAULT_WEEKLY_RULES};
   root.month.rules??={...DEFAULT_MONTHLY_RULES};root.month.kind='monthly';root.openPeriods??={};
   root.weekly??=createWeeklyLedger(date(),root.settings.weeklyRules);root.weekly.month.kind='weekly';root.weekly.month.rules??={...DEFAULT_WEEKLY_RULES};root.weekly.openPeriods??={};
   return root;
@@ -79,7 +79,7 @@ function modal(title,body,onSubmit){dialog.className='';dialog.innerHTML=`<form>
 function actions(){return `<div class="actions">${btn(t('cancel'),'dismiss')}<button class="primary" type="submit">${t('save')}</button></div>`;}
 function operationLog(){
   const ledger=activeLedger();
-  const rows=monthlyOperations({workers:payrollWorkers(),month:ledger.month,debts:ledger.debts,rules:periodRules(ledger.month)});
+  const rows=sortMonthlyOperations(monthlyOperations({workers:payrollWorkers(),month:ledger.month,debts:ledger.debts,rules:periodRules(ledger.month)}),state.settings.operationLogOrder??'oldestFirst',state.settings.lang);
   const detail=row=>{
     if(row.type==='absence')return `${num(row.value)} ${t('dayUnit')}`;
     if(row.type==='late'||row.type==='overtime'){
@@ -104,7 +104,7 @@ function settings(){
   const icons={workers:'<circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 5a3 3 0 0 1 0 6M18 15a5 5 0 0 1 3 5"/>',preferences:'<path d="M4 7h7m6 0h3M4 17h3m6 0h7"/><circle cx="14" cy="7" r="3"/><circle cx="10" cy="17" r="3"/>',backup:'<path d="M7 15V3m-4 4 4-4 4 4M17 9v12m-4-4 4 4 4-4"/>'};
   const group=(id,title,icon,content,badge='')=>`<details class="settings-group" data-section="${id}" ${openSettingsGroups.has(id)?'open':''}><summary><span class="settings-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${icons[icon]}</svg></span><span class="settings-group-label">${t(title)}</span>${badge?`<span class="settings-count">${badge}</span>`:''}<span class="settings-chevron" aria-hidden="true"></span></summary><div class="settings-group-body">${content}</div></details>`;
   const workers=`${scopeTabs()}<div class="settings-tools">${btn('+ '+t('add'),'add','primary compact-button')}</div>${activeLedger().workers.length?`<ul class="worker-list settings-worker-list">${activeLedger().workers.map(w=>`<li><div class="worker-row settings-worker-row"><span class="worker-avatar" aria-hidden="true">${esc(w.name[0])}</span><span class="worker-info"><strong class="worker-name">${esc(w.name)}</strong><span class="worker-finances"><span>${t('salary')}: <strong>${amount(w.salary)}</strong></span><span>${t('debts')}: <strong>${amount(debt(activeLedger(),w.id))}</strong></span></span></span>${btn(t('edit'),`edit:${w.id}`,'compact-button')}</div></li>`).join('')}</ul>`:`<p class="muted">${t('none')}</p>`}<p class="settings-help">${t('nextSalary')}</p>${reports.ruleSummary(periodRules(activeLedger().month))}`;
-  const preferences=`<form id="preferences"><label for="lang">${t('language')}</label><select id="lang" name="lang">${[['ar','العربية'],['tr','Türkçe'],['en','English']].map(([k,v])=>`<option value="${k}" ${state.settings.lang===k?'selected':''}>${v}</option>`).join('')}</select><label for="theme">${t('theme')}</label><select id="theme" name="theme">${['system','light','dark'].map(k=>`<option value="${k}" ${state.settings.theme===k?'selected':''}>${t(k)}</option>`).join('')}</select><p class="theme-hint">${t('themeInstant')}</p>${field('retention','number',state.settings.retention,'min="0" step="1" required')}<label class="row"><span>${t('auto')}</span><input type="checkbox" name="auto" ${state.settings.autoDelete?'checked':''}></label><div class="actions"><button class="primary" type="submit">${t('save')}</button></div></form>${lockSettings()}${monthlyRulesForm()}${weeklyRulesForm()}`;
+  const preferences=`<form id="preferences"><label for="lang">${t('language')}</label><select id="lang" name="lang">${[['ar','العربية'],['tr','Türkçe'],['en','English']].map(([k,v])=>`<option value="${k}" ${state.settings.lang===k?'selected':''}>${v}</option>`).join('')}</select><label for="theme">${t('theme')}</label><select id="theme" name="theme">${['system','light','dark'].map(k=>`<option value="${k}" ${state.settings.theme===k?'selected':''}>${t(k)}</option>`).join('')}</select><p class="theme-hint">${t('themeInstant')}</p><label for="operationLogOrder">${t('operationLogOrder')}</label><select id="operationLogOrder" name="operationLogOrder">${['oldestFirst','newestFirst','alphabetical'].map(k=>`<option value="${k}" ${(state.settings.operationLogOrder??'oldestFirst')===k?'selected':''}>${t(k)}</option>`).join('')}</select>${field('retention','number',state.settings.retention,'min="0" step="1" required')}<label class="row"><span>${t('auto')}</span><input type="checkbox" name="auto" ${state.settings.autoDelete?'checked':''}></label><div class="actions"><button class="primary" type="submit">${t('save')}</button></div></form>${lockSettings()}${monthlyRulesForm()}${weeklyRulesForm()}`;
   const backup=`<p class="settings-help">${t('copyAllDescription')}</p><div class="backup-actions">${btn(t('copyAllData'),'copy-all','primary')}${btn(t('pasteAllData'),'import-code')}</div><p class="settings-help">${t('local')}</p><div class="backup-actions">${btn(t('backup'),'backup')}${btn(t('restore'),'restore')}</div><input type="file" id="restore-file" accept="application/json" hidden>`;
   return `<h2>${t('settings')}</h2><div class="settings-groups">${group('workers','workers','workers',workers,num(state.workers.length+state.weekly.workers.length))}${group('preferences','preferences','preferences',preferences)}${group('backup','backupRestore','backup',backup)}</div><div class="app-update-row"><small>${t('version')} ${APP_VERSION}</small>${btn(t('updateApp'),'update-app','compact-button')}</div>`;
 }
@@ -223,7 +223,7 @@ document.addEventListener('submit',async e=>{
     await persist(next);toast(t(weekly?(applyCurrent?'weeklyRulesApplied':'weeklyRulesSaved'):(applyCurrent?'rulesApplied':'rulesSaved')));
   }catch(err){error.textContent=t(err.message==='duration'?'durationError':weekly?'weeklyRulesError':'rulesError');}
 });
-document.addEventListener('submit',async e=>{if(e.target.id!=='preferences')return;e.preventDefault();const f=new FormData(e.target),retention=Number(f.get('retention'));if(!Number.isInteger(retention)||retention<0)return;try{const next=structuredClone(state);next.settings={...next.settings,lang:f.get('lang'),theme:f.get('theme'),retention,autoDelete:f.has('auto')};await persist(cleanup(next));toast(t('saved'));}catch{toast(t('invalid'));}});
+document.addEventListener('submit',async e=>{if(e.target.id!=='preferences')return;e.preventDefault();const f=new FormData(e.target),retention=Number(f.get('retention'));if(!Number.isInteger(retention)||retention<0)return;try{const next=structuredClone(state);next.settings={...next.settings,lang:f.get('lang'),theme:f.get('theme'),retention,autoDelete:f.has('auto'),operationLogOrder:f.get('operationLogOrder')};await persist(cleanup(next));toast(t('saved'));}catch{toast(t('invalid'));}});
 document.addEventListener('change',async e=>{
   if(e.target.id!=='theme')return;
   const select=e.target,theme=select.value;
@@ -243,7 +243,7 @@ window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installProm
 matchMedia('(prefers-color-scheme:dark)').addEventListener('change',()=>state&&appearance());
 window.addEventListener('device-lock-change',()=>{if(state)render();});
 await initializeLock();
-try{await openStore();state=await read()??{version:1,workers:[],debts:[],archives:[],month:{key:date().slice(0,7),entries:[],salaries:{}},settings:{lang:'ar',theme:'system',retention:365,autoDelete:false}};if(!valid(state))throw Error();normalizeState(state);await persist(cleanup(state));navigator.storage?.persist?.();if('serviceWorker'in navigator)startUpdates();}catch{app.textContent='تعذر فتح البيانات المحلية. يرجى السماح بالتخزين وإعادة المحاولة. / Local storage unavailable. Please enable storage and retry.';}
+try{await openStore();state=await read()??{version:1,workers:[],debts:[],archives:[],month:{key:date().slice(0,7),entries:[],salaries:{}},settings:{lang:'ar',theme:'system',retention:365,autoDelete:false,operationLogOrder:'oldestFirst'}};if(!valid(state))throw Error();normalizeState(state);await persist(cleanup(state));navigator.storage?.persist?.();if('serviceWorker'in navigator)startUpdates();}catch{app.textContent='تعذر فتح البيانات المحلية. يرجى السماح بالتخزين وإعادة المحاولة. / Local storage unavailable. Please enable storage and retry.';}
 
 async function startUpdates(){
   try{

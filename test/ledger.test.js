@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {totals,debt,addEntry,closeMonth,cleanup,setWorkerSalary} from '../ledger.js';
 import {valid} from '../storage.js';
+import {sortMonthlyOperations} from '../report.js';
 const fixture=()=>({version:1,workers:[{id:'w',name:'Ali',salary:900}],month:{key:'2026-10',salaries:{w:900},entries:[]},debts:[{id:'o',workerId:'w',type:'opening',value:500,date:'2026-10-01'}],archives:[],settings:{lang:'ar',theme:'system',retention:365,autoDelete:false}});
 const tx=(s,type,value,extra={})=>addEntry(s,{id:crypto.randomUUID(),workerId:'w',type,value,date:'2026-10-02',note:'',...extra});
 test('salary, full-day absence, fractional delay and overtime',()=>{const s=fixture();tx(s,'absence',2);tx(s,'late',1.5);tx(s,'overtime',2.5);assert.deepEqual(totals(s.workers[0],s.month),{salary:900,absence:60,late:4.5,overtime:11.25,extra:0,advances:0,deduction:0,net:846.75,payable:846.75,deficit:0});assert.throws(()=>tx(s,'absence',0.5));});
@@ -279,4 +280,23 @@ test('operation log includes weekly workers and describes absence and time quant
   assert.ok(rows.every(row=>row.workerName==='Weekly worker'));
   assert.equal(rows[0].value,2);
   assert.equal(rows[1].value,1);
+});
+
+test('operation log supports chronological and alphabetical preferences',()=>{
+  const rows=[
+    {workerName:'Zeynep',date:'2026-10-03',id:'z'},
+    {workerName:'Ali',date:'2026-10-01',id:'a'},
+    {workerName:'Ali',date:'2026-10-02',id:'b'}
+  ];
+  assert.deepEqual(sortMonthlyOperations(rows,'oldestFirst').map(x=>x.id),['a','b','z']);
+  assert.deepEqual(sortMonthlyOperations(rows,'newestFirst').map(x=>x.id),['z','b','a']);
+  assert.deepEqual(sortMonthlyOperations(rows,'alphabetical','tr').map(x=>x.id),['a','b','z']);
+});
+test('settings accept valid operation log order and remain backward compatible',()=>{
+  const state=fixture();
+  assert.equal(valid(state),true);
+  state.settings.operationLogOrder='newestFirst';
+  assert.equal(valid(state),true);
+  state.settings.operationLogOrder='random';
+  assert.equal(valid(state),false);
 });
