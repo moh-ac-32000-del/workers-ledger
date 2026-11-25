@@ -264,3 +264,19 @@ test('monthly operation log sorts oldest first and shows signed monetary impact'
   assert.deepEqual(rows.map(row=>row.amount),[50,6.75,-60,25,-40]);
   assert.ok(rows.every(row=>row.workerName==='Ali'));
 });
+
+test('operation log includes weekly workers and describes absence and time quantities',async()=>{
+  const {monthlyOperations}=await import('../report.js');
+  const {createWeeklyLedger}=await import('../ledger.js');
+  const week=createWeeklyLedger('2026-10-30',{days:5.5,hoursPerDay:10,overtimeMultiplier:1.5});
+  week.workers=[{id:'weekly',name:'Weekly worker',salary:550}];
+  week.month.salaries.weekly=550;
+  addEntry(week,{id:'weekly-late',workerId:'weekly',type:'late',value:2,date:'2026-10-27'});
+  addEntry(week,{id:'weekly-absence',workerId:'weekly',type:'absence',value:1,date:'2026-10-28'});
+  const rows=monthlyOperations({workers:week.workers,month:week.month,debts:week.debts,rules:week.month.rules});
+  assert.deepEqual(rows.map(row=>row.type),['late','absence']);
+  assert.deepEqual(rows.map(row=>row.amount),[-20,-100]);
+  assert.ok(rows.every(row=>row.workerName==='Weekly worker'));
+  assert.equal(rows[0].value,2);
+  assert.equal(rows[1].value,1);
+});

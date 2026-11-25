@@ -49,9 +49,15 @@ textarea{font:inherit;width:100%;min-height:150px;max-height:40dvh;resize:vertic
 
 .lock-settings{border-block-start:1px solid var(--line);margin-block:16px;padding-block:12px}#lock-screen{position:fixed;inset:0;margin:0;max-width:none;max-height:none;width:100%;height:100dvh;border:0;border-radius:0;background:var(--bg);color:var(--ink);padding:24px;overflow:auto}#lock-screen::backdrop{background:var(--bg)}.lock-card{width:min(100%,320px);margin:3vh auto;text-align:center}.lock-symbol{color:var(--blue);font-size:46px;margin-bottom:20px}.lock-card input{text-align:center;font-size:26px;letter-spacing:12px;width:100%;margin-block:10px}.lock-card>[type=submit]{width:100%}.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:20px}.pin-pad button{font-size:26px;min-height:58px;border-radius:20px}.app-locked{overflow:hidden}.app-locked #app,.app-locked #dialog,.app-locked #toast,.app-locked .update-notice{visibility:hidden!important}@media print{body.app-locked>*{display:none!important}body.app-locked #lock-screen{display:block!important;position:static}}
 
-/* Monthly operation log: a compact, horizontally scrollable ledger table. */
-.operation-log{margin-top:20px;padding-top:14px;border-top:1px solid var(--line)}
-.operation-log>h3{font-size:15px;margin:0 0 12px}
+/* Period operation log: collapsed by default and available in both payroll scopes. */
+.operation-log{margin:14px 0;border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden}
+.operation-log>summary{display:flex;align-items:center;gap:10px;min-height:48px;padding:10px 12px;cursor:pointer;list-style:none;font-size:13px;font-weight:700}
+.operation-log>summary::-webkit-details-marker{display:none}
+.operation-log>summary>span:first-child{flex:1}
+.operation-log-count{font-size:11px;font-weight:600;color:var(--muted);background:var(--soft);padding:3px 8px;border-radius:10px}
+.operation-log[open]>summary{border-bottom:1px solid var(--line);background:var(--soft)}
+.operation-log[open]>summary .entry-chevron{transform:rotate(225deg);margin-top:3px}
+.operation-log>p{padding:0 12px;font-size:12px;color:var(--muted)}
 .operation-log-table{overflow-x:auto;-webkit-overflow-scrolling:touch}
 .operation-log-table table{width:100%;min-width:520px;border-collapse:collapse}
 .operation-log-table th,.operation-log-table td{padding:11px 10px;text-align:start;border-bottom:1px solid var(--line);font-size:12px;white-space:nowrap}
